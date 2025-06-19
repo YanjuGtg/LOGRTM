@@ -1,0 +1,207 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Log Viewer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f4f7fa;
+      margin: 0;
+      padding: 0;
+    }
+    .navbar {
+      background: white;
+      padding: 1rem 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 999;
+    }
+    .header-row {
+  background-color: #e9ecef;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+  margin-bottom: 10px;
+  border-radius: 8px;
+}
+.entry {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+  background: white;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.entry > div {
+  flex: 1;
+  text-align: left;
+}
+
+    .navbar input, .navbar select, .navbar button {
+      padding: 0.5rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    .navbar button {
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    .navbar button:hover {
+      background: #0056b3;
+    }
+    .container {
+      padding: 2rem;
+    }
+    .entry {
+      background: white;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <input type="file" id="logfile" accept=".log">
+    <input type="text" id="search" placeholder="Cari nama">
+    <select id="itemFilter">
+      <option value="">Filter Barang</option>
+      <option value="Desert Eagle">Desert Eagle</option>
+      <option value="MP5">MP5</option>
+      <option value="AK47">AK47</option>
+      <option value="Sultan">Sultan</option>
+      <option value="Shotgun">Shotgun</option>
+      <option value="Road Train">Road Train</option>
+      <option value="Crack">Crack</option>
+      <option value="Pot">Pot</option>
+    </select>
+    <input type="number" id="minGrams" placeholder="Minimal grams" class="hidden">
+    <button onclick="processLog()">Tampilkan</button>
+  </div>
+
+  <div class="container">
+    <div class="entry header-row">
+      <strong>Nama Pengirim</strong> |
+      <strong>Nama Penerima</strong> |
+      <strong>Jenis</strong> |
+      <strong>Barang</strong>
+    </div>
+    <div id="results"></div>
+  </div>
+  
+
+  <script>
+    let entries = [];
+
+    document.getElementById("logfile").addEventListener("change", processLog);
+    document.getElementById("itemFilter").addEventListener("change", () => {
+      const val = document.getElementById("itemFilter").value;
+      const gramInput = document.getElementById("minGrams");
+      if (["Crack", "Pot"].includes(val)) {
+        gramInput.classList.remove("hidden");
+      } else {
+        gramInput.classList.add("hidden");
+        gramInput.value = "";
+      }
+    });
+    
+
+
+    document.getElementById("search").addEventListener("input", filterAndDisplay);
+
+    function processLog() {
+      const fileInput = document.getElementById("logfile");
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const lines = e.target.result.split("\n");
+        entries = [];
+
+        const regex = /\[(.*?)\]\[(.*?)\] (\w+_\w+) to (\w+_\w+)(?:: ([^\n]+)| \(([^\)]+)\))?/;
+
+        for (let line of lines) {
+          const match = line.match(regex);
+          if (match) {
+            const [, , type, from, to, afterColon, insideParens] = match;
+            let item = afterColon || insideParens || "";
+            let grams = 0;
+
+            const gramsMatch = item.match(/(\d+)\s*grams|units/i);
+            if (gramsMatch) {
+              grams = parseInt(gramsMatch[1] || "0");
+            }
+
+            item = item.replace(/\(.*?\)/, '').trim();
+
+            entries.push({ type, from, to, item, grams });
+          }
+        }
+        filterAndDisplay();
+      };
+      reader.readAsText(fileInput.files[0]);
+    }
+
+    function filterAndDisplay() {
+      const search = document.getElementById("search").value.toLowerCase();
+      const filterItem = document.getElementById("itemFilter").value;
+      const minGrams = parseInt(document.getElementById("minGrams").value || "0");
+
+      let filtered = entries.filter(e =>
+        e.from.toLowerCase().includes(search) ||
+        e.to.toLowerCase().includes(search)
+      );
+
+      if (filterItem) {
+        filtered = filtered.filter(e => {
+          if (["Crack", "Pot"].includes(filterItem)) {
+            return e.type.toUpperCase() === filterItem.toUpperCase() && e.grams >= minGrams;
+          }
+          if (["Desert Eagle", "AK47", "MP5","Shotgun"].includes(filterItem)) {
+            return e.type === "WEAPON" && e.item === filterItem;
+          }
+          if (["Sultan", "Road Train"].includes(filterItem)) {
+            return e.type === "VEHICLE" && e.item === filterItem;
+          }
+          return false;
+        });
+      }
+
+      const container = document.getElementById("results");
+      container.innerHTML = "";
+
+      if (filtered.length === 0) {
+        container.innerHTML = "<p>Tidak ditemukan data.</p>";
+        return;
+      }
+
+      for (let e of filtered) {
+        const div = document.createElement("div");
+        div.className = "entry";
+        div.innerHTML = `
+    <div>${e.from}</div>
+    <div>${e.to}</div>
+    <div>${e.type}</div>
+    <div>${e.item || "-"}${e.grams ? " (" + e.grams + " grams)" : ""}</div>`;
+        container.appendChild(div);
+      }
+      
+      
+    }
+  </script>
+  
+</body>
+</html>
